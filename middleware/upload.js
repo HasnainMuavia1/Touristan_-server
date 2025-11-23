@@ -1,25 +1,35 @@
 const multer = require('multer');
 const path = require('path');
-const cloudinary = require('cloudinary').v2;
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const fs = require('fs');
 const ErrorResponse = require('../utils/errorResponse');
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
+// Ensure upload directories exist
+const uploadsDir = path.join(__dirname, '../uploads');
+const packagesDir = path.join(uploadsDir, 'packages');
+const profilesDir = path.join(uploadsDir, 'profiles');
+
+[uploadsDir, packagesDir, profilesDir].forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
 });
 
-// Set up Cloudinary storage with timeout
-const storage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: {
-    folder: 'packages',
-    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
-    transformation: [{ width: 1200, crop: 'limit' }],
-    // Set Cloudinary upload timeout
-    timeout: 15000 // 15 seconds timeout for Cloudinary upload
+// Set up local file storage
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    // Determine destination based on field name
+    if (file.fieldname === 'profileImage') {
+      cb(null, profilesDir);
+    } else {
+      cb(null, packagesDir);
+    }
+  },
+  filename: function (req, file, cb) {
+    // Generate unique filename: timestamp-randomnumber-originalname
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    const name = path.basename(file.originalname, ext);
+    cb(null, `${name}-${uniqueSuffix}${ext}`);
   }
 });
 
@@ -43,8 +53,8 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage: storage,
   limits: { 
-    fileSize: 5000000, // 5MB max file size
-    fieldSize: 5 * 1024 * 1024 // 5MB field size limit
+    fileSize: 10000000, // 10MB max file size (increased from 5MB)
+    fieldSize: 10 * 1024 * 1024 // 10MB field size limit
   },
   fileFilter: fileFilter
 });
@@ -75,12 +85,12 @@ exports.uploadPackageImage = (req, res, next) => {
       return next();
     }
     
-    // Add Cloudinary secure URL to request body
-    // Cloudinary returns the URL in req.file.path
-    req.body.img = req.file.path;
+    // Add local file URL to request body
+    // File is saved in uploads/packages/ directory
+    const fileUrl = `/uploads/packages/${req.file.filename}`;
+    req.body.img = fileUrl;
     
-    // You can also access additional Cloudinary data if needed
-    console.log('Cloudinary upload response:', req.file);
+    console.log('File uploaded successfully:', req.file.filename);
     
     next();
   });
@@ -112,12 +122,11 @@ exports.uploadPackageImages = (req, res, next) => {
       return next();
     }
     
-    // Add Cloudinary secure URLs to request body
-    // Each file in req.files contains the Cloudinary URL in the path property
-    req.body.images = req.files.map(file => file.path);
+    // Add local file URLs to request body
+    // Files are saved in uploads/packages/ directory
+    req.body.images = req.files.map(file => `/uploads/packages/${file.filename}`);
     
-    // You can also access additional Cloudinary data if needed
-    console.log('Cloudinary upload responses:', req.files);
+    console.log('Files uploaded successfully:', req.files.map(f => f.filename));
     
     next();
   });
@@ -125,23 +134,22 @@ exports.uploadPackageImages = (req, res, next) => {
 
 // Middleware for handling profile image uploads
 exports.uploadProfileImage = (req, res, next) => {
-  // Create a custom storage for profile images
-  const profileStorage = new CloudinaryStorage({
-    cloudinary: cloudinary,
-    params: {
-      folder: 'profiles',
-      allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
-      transformation: [{ width: 500, height: 500, crop: 'fill', gravity: 'face' }],
-      timeout: 15000 // 15 seconds timeout for Cloudinary upload
-    }
-  });
-
   // Create a custom upload instance for profile images
   const profileUpload = multer({
-    storage: profileStorage,
+    storage: multer.diskStorage({
+      destination: function (req, file, cb) {
+        cb(null, profilesDir);
+      },
+      filename: function (req, file, cb) {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const ext = path.extname(file.originalname);
+        const name = path.basename(file.originalname, ext);
+        cb(null, `${name}-${uniqueSuffix}${ext}`);
+      }
+    }),
     limits: { 
-      fileSize: 2000000, // 2MB max file size for profile images
-      fieldSize: 2 * 1024 * 1024 // 2MB field size limit
+      fileSize: 5000000, // 5MB max file size for profile images
+      fieldSize: 5 * 1024 * 1024 // 5MB field size limit
     },
     fileFilter: fileFilter
   });
@@ -170,11 +178,11 @@ exports.uploadProfileImage = (req, res, next) => {
       return next(new ErrorResponse('Please upload a profile image', 400));
     }
     
-    // Add Cloudinary secure URL to request body
-    req.body.profileImage = req.file.path;
+    // Add local file URL to request body
+    const fileUrl = `/uploads/profiles/${req.file.filename}`;
+    req.body.profileImage = fileUrl;
     
-    // You can also access additional Cloudinary data if needed
-    console.log('Cloudinary profile upload response:', req.file);
+    console.log('Profile image uploaded successfully:', req.file.filename);
     
     next();
   });

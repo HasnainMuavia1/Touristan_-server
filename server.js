@@ -60,6 +60,9 @@ app.use((req, res, next) => {
 // Enable CORS
 app.use(cors());
 
+// Serve static files from uploads directory
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 // Set request timeout (30 seconds for all routes)
 app.use(timeout(30));
 

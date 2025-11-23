@@ -1,24 +1,29 @@
 const multer = require('multer');
 const path = require('path');
-const cloudinary = require('cloudinary').v2;
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const fs = require('fs');
 const ErrorResponse = require('../utils/errorResponse');
 
-// Configure Cloudinary (using existing configuration from environment)
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
+// Ensure upload directories exist
+const uploadsDir = path.join(__dirname, '../uploads');
+const postsDir = path.join(uploadsDir, 'posts');
+
+[uploadsDir, postsDir].forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
 });
 
-// Set up Cloudinary storage for post images
-const storage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: {
-    folder: 'posts',
-    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
-    transformation: [{ width: 1200, crop: 'limit' }],
-    timeout: 15000 // 15 seconds timeout for Cloudinary upload
+// Set up local file storage for post images
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, postsDir);
+  },
+  filename: function (req, file, cb) {
+    // Generate unique filename: timestamp-randomnumber-originalname
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    const name = path.basename(file.originalname, ext);
+    cb(null, `${name}-${uniqueSuffix}${ext}`);
   }
 });
 
@@ -42,12 +47,11 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage: storage,
   limits: { 
-    fileSize: 5000000, // 5MB max file size
-    fieldSize: 5 * 1024 * 1024, // 5MB field size limit
+    fileSize: 10000000, // 10MB max file size (increased from 5MB)
+    fieldSize: 10 * 1024 * 1024, // 10MB field size limit
     fields: 20 // Allow up to 20 non-file fields
   },
-  fileFilter: fileFilter,
-  preservePath: true // Preserve full path of files
+  fileFilter: fileFilter
 });
 
 // Middleware for handling post image uploads
@@ -84,9 +88,12 @@ exports.uploadPostImage = (req, res, next) => {
       return next();
     }
     
-    // Add Cloudinary secure URL to request body
-    req.body.image = req.file.path;
-    console.log('Image uploaded successfully to Cloudinary:', req.file.path);
+    // Add local file URL to request body
+    // File is saved in uploads/posts/ directory
+    const fileUrl = `/uploads/posts/${req.file.filename}`;
+    req.body.image = fileUrl;
+    console.log('Image uploaded successfully:', req.file.filename);
+    console.log('Image URL:', fileUrl);
     
     // Make sure content field is preserved
     console.log('Content field after upload:', req.body.content);

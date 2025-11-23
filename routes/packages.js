@@ -14,7 +14,9 @@ const {
   enablePackage,
   getAllPackagesAdmin,
   uploadPackageImage,
-  uploadPackageImages
+  uploadPackageImages,
+  uploadTempImage,
+  uploadTempImages
 } = require('../controllers/package');
 
 // Apply optional auth to all routes
@@ -29,6 +31,10 @@ router.use(protect); // - No longer needed as we check in the authorize middlewa
 
 // Admin only routes
 router.get('/admin/all', authorize('admin'), getAllPackagesAdmin);
+
+// Temporary upload routes - for uploading images before package creation
+router.post('/temp/image', authorize('admin'), uploadSingleImage, uploadTempImage);
+router.post('/temp/images', authorize('admin'), uploadMultipleImages, uploadTempImages);
 
 // Image upload routes - for file uploads
 router.put('/:id/image', authorize('admin'), uploadSingleImage, uploadPackageImage);

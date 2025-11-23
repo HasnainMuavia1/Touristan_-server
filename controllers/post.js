@@ -79,10 +79,11 @@ exports.uploadMainImage = async (req, res, next) => {
       });
     }
 
-    // Return the Cloudinary URL of the uploaded main image
+    // Return the local file URL of the uploaded main image
+    const fileUrl = `/uploads/posts/${req.file.filename}`;
     res.status(200).json({
       success: true,
-      imageUrl: req.file.path,
+      imageUrl: fileUrl,
     });
   } catch (err) {
     console.error("Error uploading main image:", err);
@@ -102,10 +103,11 @@ exports.uploadSubImage = async (req, res, next) => {
       });
     }
 
-    // Return the Cloudinary URL of the uploaded sub image
+    // Return the local file URL of the uploaded sub image
+    const fileUrl = `/uploads/posts/${req.file.filename}`;
     res.status(200).json({
       success: true,
-      imageUrl: req.file.path,
+      imageUrl: fileUrl,
     });
   } catch (err) {
     console.error("Error uploading sub image:", err);

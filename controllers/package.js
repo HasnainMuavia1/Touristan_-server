@@ -1,27 +1,25 @@
 const Package = require('../models/Package');
 const ErrorResponse = require('../utils/errorResponse');
 const { validationResult } = require('express-validator');
-const cloudinary = require('cloudinary').v2;
+const fs = require('fs');
+const path = require('path');
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
-});
-
-// Helper function to extract public_id from Cloudinary URL
-const getPublicIdFromUrl = (url) => {
-  if (!url || typeof url !== 'string') return null;
+// Helper function to delete local file
+const deleteLocalFile = (fileUrl) => {
+  if (!fileUrl || typeof fileUrl !== 'string') return;
   
-  // Check if it's a Cloudinary URL
-  if (!url.includes('cloudinary.com')) return null;
+  // Check if it's a local file path
+  if (!fileUrl.startsWith('/uploads/')) return;
   
-  // Extract the public ID from the URL
-  const parts = url.split('/');
-  const filenamePart = parts[parts.length - 1];
-  const publicId = `packages/${filenamePart.split('.')[0]}`;
-  return publicId;
+  try {
+    const filePath = path.join(__dirname, '..', fileUrl);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      console.log('Deleted local file:', filePath);
+    }
+  } catch (err) {
+    console.error('Error deleting local file:', err);
+  }
 };
 
 // @desc    Get all packages
@@ -157,12 +155,9 @@ exports.uploadPackageImage = async (req, res, next) => {
       return next(new ErrorResponse('Please upload an image or provide an image URL', 400));
     }
 
-    // If package already has an image, delete the old one from Cloudinary
+    // If package already has an image, delete the old local file
     if (package.img) {
-      const publicId = getPublicIdFromUrl(package.img);
-      if (publicId) {
-        await cloudinary.uploader.destroy(publicId);
-      }
+      deleteLocalFile(package.img);
     }
 
     // Update package with new image
@@ -202,13 +197,10 @@ exports.uploadPackageImages = async (req, res, next) => {
       return next(new ErrorResponse('Please upload at least one image or provide image URLs', 400));
     }
 
-    // If package already has images, delete the old ones from Cloudinary
+    // If package already has images, delete the old local files
     if (package.images && package.images.length > 0) {
       for (const img of package.images) {
-        const publicId = getPublicIdFromUrl(img);
-        if (publicId) {
-          await cloudinary.uploader.destroy(publicId);
-        }
+        deleteLocalFile(img);
       }
     }
 
@@ -289,6 +281,64 @@ exports.enablePackage = async (req, res, next) => {
     res.status(200).json({
       success: true,
       data: package
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    Upload temporary image (before package creation)
+// @route   POST /api/packages/temp/image
+// @access  Private/Admin
+exports.uploadTempImage = async (req, res, next) => {
+  try {
+    // Check if image was uploaded
+    if (!req.body.img && !req.file) {
+      return next(new ErrorResponse('Please upload an image', 400));
+    }
+
+    // Get image URL from either req.body.img (if URL was provided) or req.file.path (if file was uploaded)
+    const imageUrl = req.body.img || req.file?.path;
+
+    if (!imageUrl) {
+      return next(new ErrorResponse('Failed to get image URL', 400));
+    }
+
+    res.status(200).json({
+      success: true,
+      url: imageUrl,
+      data: {
+        url: imageUrl
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @desc    Upload temporary images (before package creation)
+// @route   POST /api/packages/temp/images
+// @access  Private/Admin
+exports.uploadTempImages = async (req, res, next) => {
+  try {
+    // Check if images were uploaded
+    if ((!req.body.images || req.body.images.length === 0) && (!req.files || req.files.length === 0)) {
+      return next(new ErrorResponse('Please upload at least one image', 400));
+    }
+
+    // Get image URLs from either req.body.images (if URLs were provided) or req.files (if files were uploaded)
+    const imageUrls = req.body.images || (req.files ? req.files.map(file => file.path) : []);
+
+    if (!imageUrls || imageUrls.length === 0) {
+      return next(new ErrorResponse('Failed to get image URLs', 400));
+    }
+
+    res.status(200).json({
+      success: true,
+      urls: imageUrls,
+      data: {
+        urls: imageUrls
+      }
     });
   } catch (err) {
     next(err);

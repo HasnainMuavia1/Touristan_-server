@@ -109,6 +109,16 @@ const PackageSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  hotelName: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  cdn: {
+    type: String,
+    trim: true,
+    default: ''
+  },
   createdAt: {
     type: Date,
     default: Date.now
